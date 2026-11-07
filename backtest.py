@@ -1,7 +1,7 @@
 """No-lookahead SMA cross paper strategy. Trades execute next bar open, no fabricated history."""
 import numpy as np
 import pandas as pd
-from paper_engine import SPECS
+from cloud_paper import SPECS
 
 def ma_crossover(df,market,short=20,long=60,initial=1000000.,fee=10.,margin_rate=.12,slippage_ticks=1,side_mode='both'):
     if short>=long or short<2:raise ValueError('Short MA must be below long MA')

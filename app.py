@@ -19,8 +19,12 @@ st.markdown('<style>.block-container{max-width:1650px;padding-top:1rem} [data-te
 # Login before any market load or paper-account state is visible.
 try:
     init_db()
-except Exception:
-    st.error('Cloud database unavailable or DATABASE_URL not configured. / 数据库未配置或连接失败。')
+except Exception as e:
+    import logging
+    logging.error("Database initialization failed: %s", type(e).__name__)
+    st.error(
+        f"Database initialization failed: {type(e).__name__}"
+    )
     st.stop()
 CURRENT_USER=gate()
 with st.sidebar:

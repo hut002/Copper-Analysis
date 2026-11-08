@@ -19,12 +19,11 @@ st.markdown('<style>.block-container{max-width:1650px;padding-top:1rem} [data-te
 # Login before any market load or paper-account state is visible.
 try:
     init_db()
+
 except Exception as e:
-    import logging
-    logging.error("Database initialization failed: %s", type(e).__name__)
-    st.error(
-        f"Database initialization failed: {type(e).__name__}"
-    )
+    import streamlit as st
+
+    st.error(f"Database initialization failed: {e}")
     st.stop()
 CURRENT_USER=gate()
 with st.sidebar:

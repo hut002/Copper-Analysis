@@ -44,44 +44,90 @@ CREATE TABLE IF NOT EXISTS market_cache (
 );
 '''
 
+class DatabaseConfigError(RuntimeError):
+    """Sanitized database configuration error, safe to show to signed-out users."""
+
+
+class DatabaseConnectionError(RuntimeError):
+    """Sanitized connection error: never includes a URL, username or password."""
+
+
+def _secret_value(name, default=None):
+    """Load Streamlit secrets in cloud, environment variables in CLI tools."""
+    value = os.environ.get(name)
+    if value is not None and value != "":
+        return value
+    try:
+        import streamlit as st
+        return st.secrets.get(name, default)
+    except (FileNotFoundError, KeyError, AttributeError):
+        return default
+
+
+def connection_options(url=None):
+    """Prefer separate parameters; avoids percent-encoding passwords in DSN URLs.
+
+    Cloud secrets example: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD.
+    DATABASE_URL remains supported for backward compatibility.
+    """
+    if url:
+        return {'conninfo': str(url), 'sslmode': 'require'}
+    host = _secret_value('DB_HOST')
+    user = _secret_value('DB_USER')
+    password = _secret_value('DB_PASSWORD')
+    if host or user or password:
+        if not all((host, user, password)):
+            raise DatabaseConfigError('DB_CONFIG: DB_HOST / DB_USER / DB_PASSWORD must all be provided')
+        port = _secret_value('DB_PORT', 5432)
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            raise DatabaseConfigError('DB_CONFIG: DB_PORT must be numeric') from None
+        if not 1 <= port <= 65535:
+            raise DatabaseConfigError('DB_CONFIG: invalid DB_PORT')
+        return {'host': str(host).strip(), 'port': port,
+                'dbname': str(_secret_value('DB_NAME', 'postgres')),
+                'user': str(user), 'password': str(password), 'sslmode': 'require'}
+    dsn = _secret_value('DATABASE_URL')
+    if not dsn:
+        raise DatabaseConfigError('DB_CONFIG: configure DB_HOST/DB_USER/DB_PASSWORD or DATABASE_URL in Streamlit Secrets')
+    if '[YOUR-PASSWORD]' in str(dsn) or 'YOUR_PASSWORD' in str(dsn):
+        raise DatabaseConfigError('DB_CONFIG: placeholder database password is still present')
+    return {'conninfo': str(dsn), 'sslmode': 'require'}
+
+
+def classify_connection_error(error):
+    """Return a safe error category without logging confidential DSNs."""
+    msg = str(error).lower()
+    if any(x in msg for x in ('password authentication failed', 'authentication failed', 'invalid password', '28p01')):
+        return 'DB_AUTH: incorrect PostgreSQL username or password'
+    if any(x in msg for x in ('tenant or user not found', 'unknown tenant', 'invalid tenant')):
+        return 'DB_POOLER_USER: verify pooler user and project reference'
+    if any(x in msg for x in ('could not translate host name', 'name or service not known', 'nodename nor servname', 'temporary failure in name resolution')):
+        return 'DB_DNS: verify database host and DNS'
+    if any(x in msg for x in ('timed out', 'timeout', 'connection timeout')):
+        return 'DB_TIMEOUT: database not reachable within 12 seconds'
+    if any(x in msg for x in ('certificate', 'ssl error', 'tls error', 'ssl connection')):
+        return 'DB_TLS: check pooler TLS and certificate/network configuration'
+    if any(x in msg for x in ('connection refused', 'no route to host', 'network is unreachable')):
+        return 'DB_NETWORK: host/port/network access failed'
+    if any(x in msg for x in ('permission denied', 'insufficient privilege', '42501')):
+        return 'DB_PERMISSION: database account lacks schema privileges'
+    if any(x in msg for x in ('database', 'does not exist', '3d000')) and ('does not exist' in msg):
+        return 'DB_NAME: database does not exist'
+    return 'DB_CONNECTION: PostgreSQL connection failed; consult server-side sanitized diagnostics'
+
+
 def connect(url=None):
     import psycopg
-    import streamlit as st
     from psycopg.rows import dict_row
-
-    if not url:
-        url = st.secrets.get("DATABASE_URL")
-
-    if not url:
-        raise RuntimeError("DB_CONFIG: DATABASE_URL is missing")
-
+    opts = connection_options(url)
     try:
-        return psycopg.connect(
-            url,
-            row_factory=dict_row,
-            connect_timeout=12,
-            autocommit=False
-        )
+        return psycopg.connect(**opts, row_factory=dict_row, connect_timeout=12, autocommit=False)
+    except psycopg.OperationalError as exc:
+        raise DatabaseConnectionError(classify_connection_error(exc)) from None
 
-    except psycopg.OperationalError as e:
-        msg = str(e).lower()
 
-        if "password authentication failed" in msg:
-            code = "DB_AUTH: Incorrect database password"
-        elif "tenant or user not found" in msg:
-            code = "DB_USER: Incorrect Supabase pooler username"
-        elif "could not translate host name" in msg:
-            code = "DB_DNS: Database hostname cannot be resolved"
-        elif "timed out" in msg or "timeout" in msg:
-            code = "DB_TIMEOUT: Database connection timed out"
-        elif "ssl" in msg or "certificate" in msg:
-            code = "DB_SSL: SSL/TLS connection failed"
-        elif "connection refused" in msg:
-            code = "DB_REFUSED: Connection refused"
-        else:
-            code = "DB_CONNECTION: PostgreSQL connection failed"
-
-        raise RuntimeError(code) from None
 def init_db(url=None):
     with connect(url) as c:
         for stmt in SCHEMA.split(';'):

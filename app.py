@@ -12,18 +12,23 @@ from cloud_paper import connection,account,reset,place,execute,equity,set_index,
 from backtest import ma_crossover
 
 ROOT=Path(__file__).resolve().parent
-from cloud_db import init_db,cache_save,cache_load
+from cloud_db import init_db,cache_save,cache_load,DatabaseConfigError,DatabaseConnectionError,classify_connection_error
 from cloud_auth import gate,change_credentials
-st.set_page_config(page_title='Copper Quant + Paper Trading V5',page_icon='📈',layout='wide')
+st.set_page_config(page_title='Copper Quant Cloud V6.1',page_icon='📈',layout='wide')
 st.markdown('<style>.block-container{max-width:1650px;padding-top:1rem} [data-testid="stMetric"]{border:1px solid rgba(128,128,128,.18);padding:12px;border-radius:12px}</style>',unsafe_allow_html=True)
 # Login before any market load or paper-account state is visible.
 try:
     init_db()
-
-except Exception as e:
-    import streamlit as st
-
-    st.error(f"Database initialization failed: {e}")
+except (DatabaseConfigError, DatabaseConnectionError) as exc:
+    # Only sanitized DB_ codes are surfaced; passwords and DSNs are never shown.
+    st.error(str(exc))
+    st.caption('请到 Streamlit Cloud → App settings → Secrets 检查数据库参数。/ Check Streamlit Cloud Secrets.')
+    st.stop()
+except Exception as exc:
+    import logging
+    # Do not log raw exception text: database drivers can include credentials.
+    logging.error('Database initialization error type: %s', type(exc).__name__)
+    st.error('DB_INITIALIZATION: Database table setup failed. Check PostgreSQL permissions and schema.')
     st.stop()
 CURRENT_USER=gate()
 with st.sidebar:

@@ -46,12 +46,42 @@ CREATE TABLE IF NOT EXISTS market_cache (
 
 def connect(url=None):
     import psycopg
+    import streamlit as st
     from psycopg.rows import dict_row
-    if not url:
-        import streamlit as st
-        url=st.secrets['DATABASE_URL']
-    return psycopg.connect(url, row_factory=dict_row, connect_timeout=12, autocommit=False)
 
+    if not url:
+        url = st.secrets.get("DATABASE_URL")
+
+    if not url:
+        raise RuntimeError("DB_CONFIG: DATABASE_URL is missing")
+
+    try:
+        return psycopg.connect(
+            url,
+            row_factory=dict_row,
+            connect_timeout=12,
+            autocommit=False
+        )
+
+    except psycopg.OperationalError as e:
+        msg = str(e).lower()
+
+        if "password authentication failed" in msg:
+            code = "DB_AUTH: Incorrect database password"
+        elif "tenant or user not found" in msg:
+            code = "DB_USER: Incorrect Supabase pooler username"
+        elif "could not translate host name" in msg:
+            code = "DB_DNS: Database hostname cannot be resolved"
+        elif "timed out" in msg or "timeout" in msg:
+            code = "DB_TIMEOUT: Database connection timed out"
+        elif "ssl" in msg or "certificate" in msg:
+            code = "DB_SSL: SSL/TLS connection failed"
+        elif "connection refused" in msg:
+            code = "DB_REFUSED: Connection refused"
+        else:
+            code = "DB_CONNECTION: PostgreSQL connection failed"
+
+        raise RuntimeError(code) from None
 def init_db(url=None):
     with connect(url) as c:
         for stmt in SCHEMA.split(';'):

@@ -1,0 +1,15 @@
+Copper Quant Cloud V6.1 管理员密码重置工具
+
+1. 将 ZIP 解压到任意本地目录（不要上传 GitHub）。
+2. Windows 双击 Run_Reset_Windows.bat。
+3. 用户名直接回车默认 shyx，也可输入其它账户名。
+4. 输入 Supabase 数据库密码（不是 Copper Quant 登录密码；不会回显）。
+5. 输入自己选择的新 Copper Quant 登录密码（至少14位），再次输入确认。
+6. 成功后回到 Streamlit 固定网址登录，不需重建表、不需更改 Streamlit Secrets。
+
+安全说明：
+- 脚本不保存、不打印数据库密码或网页登录密码。
+- 已有账户保持原 user_id，之前交易及持仓数据不会被删除；同时解除该账户登录锁定。
+- 如果输错用户名而该用户名不存在，则会新建一个账户，而不是重置既有账户。
+- 本工具不能恢复旧密码，只能设置新密码。
+- 若之前分享过数据库密码，请先在 Supabase 中轮换，并同步更新 Streamlit Secrets 中 DB_PASSWORD。

@@ -73,12 +73,35 @@ def execute(c,market,mode,price,observation_date,margin_rate=.12,fee_per_lot=10.
     c.commit();return {'filled':filled,'rejected':rejected,**e}
 def set_index(c,market,mode,day_idx):
     c.execute('UPDATE accounts SET day_idx=%s WHERE user_id=%s AND market=%s AND mode=%s',(int(day_idx),c.user_id,market,mode));c.commit()
-def rows(c,table,market,mode):
-    if table not in ('orders','valuations'):raise ValueError('Invalid table')
+def rows(c, table, market, mode):
+    """Fetch the signed-in user's journal as a DataFrame.
+
+    psycopg's cursor.description is not available after the cursor closes.
+    This adapter uses dict_row, so each fetched record is already a mapping.
+    Convert records *inside* the cursor context and never depend on a closed
+    cursor. Preserve columns for empty journals (before first order/fill).
+    """
+    columns = {
+        'orders': ['id', 'user_id', 'market', 'mode', 'created_at',
+                   'side', 'lots', 'order_type', 'limit_price', 'status',
+                   'submitted_price', 'executed_at', 'executed_price', 'reason'],
+        'valuations': ['id', 'user_id', 'market', 'mode', 'observation_date',
+                       'price', 'cash', 'qty', 'equity', 'margin', 'recorded_at'],
+    }
+    if table not in columns:
+        raise ValueError('Invalid table')
     with c.c.cursor() as cur:
-        cur.execute(f'SELECT * FROM {table} WHERE user_id=%s AND market=%s AND mode=%s ORDER BY id',(c.user_id,market,mode))
-        result=cur.fetchall()
-    return pd.DataFrame(result,columns=[x.name for x in cur.description]) if result else pd.DataFrame(columns=['id','status'] if table=='orders' else ['observation_date','equity'])
+        cur.execute(
+            f'SELECT * FROM {table} WHERE user_id=%s AND market=%s AND mode=%s ORDER BY id',
+            (c.user_id, market, mode),
+        )
+        records = cur.fetchall()
+        if records:
+            # connect() uses psycopg.rows.dict_row; all values are mapped to
+            # their PostgreSQL column names. Works after the cursor closes.
+            return pd.DataFrame.from_records([dict(record) for record in records])
+    return pd.DataFrame(columns=columns[table])
+
 def cancel_order(c,market,mode,order_id):
     cur=c.execute("UPDATE orders SET status='CANCELLED',reason='User cancelled' WHERE id=%s AND user_id=%s AND market=%s AND mode=%s AND status='PENDING'",(int(order_id),c.user_id,market,mode))
     c.commit();return cur.rowcount==1

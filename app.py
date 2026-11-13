@@ -10,6 +10,7 @@ from quant_engine import fetch_shfe,fetch_lme,normalize,metrics_and_indicators,m
 from hedge_engine import scenario_table,maturity_table
 from cloud_paper import connection,account,reset,place,execute,equity,set_index,rows,SPECS,cancel_order
 from backtest import ma_crossover
+from options_hedge_lab import render as render_options_hedge_lab
 
 ROOT=Path(__file__).resolve().parent
 from cloud_db import init_db,cache_save,cache_load,DatabaseConfigError,DatabaseConnectionError,classify_connection_error
@@ -103,7 +104,7 @@ with st.sidebar:
 
 for m,err in st.session_state.get('errors',{}).items():st.error(f'{NAMES[m]}: {err}')
 data=st.session_state.get('data',{});sources=st.session_state.get('sources',{})
-tab_names=[tr('市场概览','Overview'),tr('技术指标','Technicals'),tr('风险与蒙特卡洛','Risk & Monte Carlo'),tr('套保策略','Hedging'),tr('模拟交易','Paper trading'),tr('策略回测','Strategy backtest'),tr('外部模拟盘对账','External sim reconciliation')]
+tab_names=[tr('市场概览','Overview'),tr('技术指标','Technicals'),tr('风险与蒙特卡洛','Risk & Monte Carlo'),tr('套保策略','Hedging'),tr('模拟交易','Paper trading'),tr('策略回测','Strategy backtest'),tr('外部模拟盘对账','External sim reconciliation'),tr('期权套保回测','Options hedging lab')]
 tabs=st.tabs(tab_names)
 with tabs[0]:
     if not data:st.info(tr('请先从左侧获取真实行情，或上传CSV。模拟交易中的前向模式允许手动输入观察价。','Load real market history or CSV in the sidebar. Forward paper mode can use manually confirmed market quotes.'))
@@ -275,3 +276,6 @@ with tabs[6]:
     st.markdown(tr('**真实模拟盘参考：** [上期所 SimNow 指南](https://edu.shfe.com.cn/home/simulate/simnow.html) · [SimNow 官网](https://www.simnow.com.cn/)','**Supported external reference:** [SHFE SimNow guide](https://edu.shfe.com.cn/home/simulate/simnow.html) · [SimNow website](https://www.simnow.com.cn/)'))
 st.divider()
 st.caption(tr('数据来源：SHFE主连为第三方公开行情；LME 3M第三方参考价需核对授权及报价定义。所有模拟成交仅为云端纸面交易，不构成投资建议。','Data: third-party public SHFE continuous series and third-party LME 3M reference (verify quote definitions/licensing). All fills are cloud paper simulations; not investment advice.'))
+
+with tabs[7]:
+    render_options_hedge_lab(data,sources,ZH)

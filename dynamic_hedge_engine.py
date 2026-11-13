@@ -115,9 +115,46 @@ def historical_regime_backtest(prices, notional=10_000_000, horizon=63, n_cycles
                         Strategy=strategy,Entry=s0,Exit=s1,IV_model=iv,
                         Tonnes_theoretical=tonnes,Notional=notional,
                         PnL=pnl,Return_pct=100*pnl/notional,
+                        Beginning_equity=notional,Ending_equity=notional+pnl,
+                        Period_label=f'Q{cycle+1} (3 months)',
                         Hedge_mix=' + '.join(f'{int(round(w*100))}% {k}' for k,w in weights.items()),
                         Put_premium_per_tonne=premiums['put']))
     return pd.DataFrame(rows)
+
+def period_return_report(results, initial_capital=10_000_000):
+    """Return a cycle-by-cycle statement for EVERY strategy.
+
+    Each quarterly backtest resets physical exposure to the same notional.
+    Therefore annual P&L / notional is a sum of four quarterly returns, NOT
+    a compounded return. Separate compounded hypothetical reinvestment is
+    shown for reference and is not used by the engine.
+    """
+    required={'Cycle','Strategy','PnL','Start','End','Return_pct'}
+    if not required.issubset(results.columns):
+        raise ValueError('Missing required period result fields')
+    if initial_capital<=0: raise ValueError('initial_capital must be positive')
+    report=results.sort_values(['Strategy','Cycle']).copy()
+    report['Beginning_equity_fixed']=float(initial_capital)
+    report['Ending_equity_fixed']=float(initial_capital)+report['PnL']
+    report['Quarter_return_pct']=100*report['PnL']/float(initial_capital)
+    report['Cumulative_PnL']=report.groupby('Strategy',sort=False)['PnL'].cumsum()
+    report['Cumulative_return_pct']=100*report['Cumulative_PnL']/float(initial_capital)
+    report['Period_months']=3
+    return report
+
+def period_return_summary(results, initial_capital=10_000_000):
+    report=period_return_report(results,initial_capital)
+    out=[]
+    for name,g in report.groupby('Strategy',sort=False):
+        g=g.sort_values('Cycle')
+        quarters={f'Q{int(r.Cycle)}_3M_return_pct':float(r.Quarter_return_pct) for r in g.itertuples()}
+        pnl=float(g.PnL.sum())
+        out.append(dict(Strategy=name,**quarters,Annual_PnL=pnl,
+                        Annual_return_fixed_pct=100*pnl/initial_capital,
+                        Quarterly_avg_return_pct=float(g.Quarter_return_pct.mean()),
+                        Worst_quarter_return_pct=float(g.Quarter_return_pct.min()),
+                        Compounded_if_reinvested_pct=100*(float(np.prod(1+g.Quarter_return_pct.to_numpy()/100))-1)))
+    return pd.DataFrame(out)
 
 def summary_frame(results, profit_target=0):
     records=[]

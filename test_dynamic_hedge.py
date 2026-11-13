@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from dynamic_hedge_engine import (
   regime_indicators,historical_regime_backtest,forward_bootstrap,
-  option_trade_pnl,adaptive_weights,summary_frame)
+  option_trade_pnl,adaptive_weights,summary_frame,
+  period_return_report,period_return_summary)
 
 def sample(kind='up',n=550):
     rng=np.random.default_rng(123)
@@ -48,3 +49,17 @@ try:historical_regime_backtest(sample('up',200))
 except ValueError:pass
 else:raise AssertionError('Missing expected short-history error')
 print('PASS dynamic hedging: 3 regimes, 4 quarters, 6 strategies, forecasts, hedge invariants, no-lookahead, short-data')
+
+# Quarterly return accounting: each 3-month cycle uses FIXED inventory notional.
+x=historical_regime_backtest(sample('up'))
+r=period_return_report(x,10_000_000)
+a=period_return_summary(x,10_000_000)
+assert len(r)==24 and len(a)==6
+assert (r.Period_months==3).all()
+assert np.allclose(r.Quarter_return_pct,r.PnL/10_000_000*100)
+assert np.allclose(r.Ending_equity_fixed,10_000_000+r.PnL)
+for name,g in r.groupby('Strategy'):
+    row=a[a.Strategy==name].iloc[0]
+    assert np.isclose(row.Annual_PnL,g.PnL.sum())
+    assert np.isclose(row.Annual_return_fixed_pct,g.Quarter_return_pct.sum())
+print('PASS V6.4 quarterly P&L/return accounting, annual summary')

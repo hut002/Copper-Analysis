@@ -2,7 +2,8 @@
 import pandas as pd
 import streamlit as st
 from dynamic_hedge_engine import (regime_indicators,historical_regime_backtest,
-                                 summary_frame,forward_bootstrap)
+                                 summary_frame,forward_bootstrap,
+                                 period_return_report,period_return_summary)
 
 def render(data,sources,zh=True):
     T=lambda cn,en:cn if zh else en
@@ -43,6 +44,31 @@ def render(data,sources,zh=True):
     st.markdown('#### '+T('过去一年：四个不重叠的63交易日周期','Historical: four nonoverlapping 63-session cycles'))
     try:
         hist=historical_regime_backtest(data[market],**params)
+        period=period_return_report(hist,notional)
+        period_summary=period_return_summary(hist,notional)
+        st.markdown('#### '+T('每期（三个月）损益与收益率','Period-by-period (3 months) P&L and return'))
+        chosen=st.selectbox(T('查看策略每期损益','Choose strategy for quarterly P&L'),list(period_summary.Strategy),index=list(period_summary.Strategy).index('Regime adaptive'),key='dyn_quarter_focus')
+        focus=period[period.Strategy==chosen].sort_values('Cycle')
+        cols=st.columns(4)
+        for i,row in enumerate(focus.itertuples()):
+            cols[i].metric(f'Q{int(row.Cycle)} · 3M',f'{row.Quarter_return_pct:+.2f}%',f'{row.PnL:+,.0f} {unit}',delta_color='normal')
+        view=focus[['Cycle','Start','End','Regime_at_entry','Hedge_mix','Beginning_equity_fixed','PnL','Ending_equity_fixed','Quarter_return_pct','Cumulative_PnL','Cumulative_return_pct']].rename(columns={
+            'Cycle':T('期数','Cycle'),'Start':T('开始日期','Start date'),'End':T('结束日期','End date'),
+            'Regime_at_entry':T('入场市场状态','Entry regime'),'Hedge_mix':T('套保组成','Hedge mix'),
+            'Beginning_equity_fixed':T('期初库存本金','Starting inventory notional'),
+            'PnL':T('本期损益','Period P&L'),'Ending_equity_fixed':T('期末参考价值','End reference equity'),
+            'Quarter_return_pct':T('本期收益率 %','3M return %'),
+            'Cumulative_PnL':T('累计损益','Cumulative P&L'),
+            'Cumulative_return_pct':T('累计收益率 %','Cumulative return %')})
+        st.dataframe(view,use_container_width=True,hide_index=True)
+        st.bar_chart(focus.set_index('Cycle')[['Quarter_return_pct']])
+        st.markdown('#### '+T('六种策略：逐期收益率与年度汇总','Six strategies: each 3M return and annual total'))
+        st.dataframe(period_summary,use_container_width=True,hide_index=True)
+        st.caption(T('年度收益率=四期损益合计÷固定1000万元（或你输入的本金）。每一期独立重置同一笔名义库存，年度数字不是逐期复利，也不代表已经实现的实际现金回报。',
+                     'Annual fixed-notional return = sum of four 3M P&Ls divided by the unchanged starting notional. Each quarter is an independent reset, not real reinvested or realized cash returns.'))
+        st.download_button(T('下载每期损益与收益率CSV','Download 3M P&L and returns CSV'),period.to_csv(index=False).encode('utf-8-sig'),file_name=f'{market}_quarterly_returns.csv',key='dyn_period_csv')
+        st.download_button(T('下载年度收益率汇总CSV','Download annual return summary CSV'),period_summary.to_csv(index=False).encode('utf-8-sig'),file_name=f'{market}_annual_returns.csv',key='dyn_annual_csv')
+        st.markdown('#### '+T('所有策略完整交易记录','All strategy-level quarterly transactions'))
         st.dataframe(hist[['Cycle','Start','End','Regime_at_entry','Strategy','Hedge_mix','PnL','Return_pct']],use_container_width=True,hide_index=True)
         st.bar_chart(hist.pivot(index='Cycle',columns='Strategy',values='PnL'))
         s=summary_frame(hist,notional*margin)

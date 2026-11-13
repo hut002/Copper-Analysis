@@ -11,6 +11,7 @@ from hedge_engine import scenario_table,maturity_table
 from cloud_paper import connection,account,reset,place,execute,equity,set_index,rows,SPECS,cancel_order
 from backtest import ma_crossover
 from options_hedge_lab import render as render_options_hedge_lab
+from dynamic_hedge_ui import render as render_dynamic_hedge
 
 ROOT=Path(__file__).resolve().parent
 from cloud_db import init_db,cache_save,cache_load,DatabaseConfigError,DatabaseConnectionError,classify_connection_error
@@ -104,7 +105,7 @@ with st.sidebar:
 
 for m,err in st.session_state.get('errors',{}).items():st.error(f'{NAMES[m]}: {err}')
 data=st.session_state.get('data',{});sources=st.session_state.get('sources',{})
-tab_names=[tr('市场概览','Overview'),tr('技术指标','Technicals'),tr('风险与蒙特卡洛','Risk & Monte Carlo'),tr('套保策略','Hedging'),tr('模拟交易','Paper trading'),tr('策略回测','Strategy backtest'),tr('外部模拟盘对账','External sim reconciliation'),tr('期权套保回测','Options hedging lab')]
+tab_names=[tr('市场概览','Overview'),tr('技术指标','Technicals'),tr('风险与蒙特卡洛','Risk & Monte Carlo'),tr('套保策略','Hedging'),tr('模拟交易','Paper trading'),tr('策略回测','Strategy backtest'),tr('外部模拟盘对账','External sim reconciliation'),tr('期权套保回测','Options hedging lab'),tr('动态铜套保引擎','Dynamic copper hedging')]
 tabs=st.tabs(tab_names)
 with tabs[0]:
     if not data:st.info(tr('请先从左侧获取真实行情，或上传CSV。模拟交易中的前向模式允许手动输入观察价。','Load real market history or CSV in the sidebar. Forward paper mode can use manually confirmed market quotes.'))
@@ -279,3 +280,6 @@ st.caption(tr('数据来源：SHFE主连为第三方公开行情；LME 3M第三�
 
 with tabs[7]:
     render_options_hedge_lab(data,sources,ZH)
+
+with tabs[8]:
+    render_dynamic_hedge(data,sources,ZH)
